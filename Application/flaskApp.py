@@ -18,16 +18,27 @@ app = Flask(__name__)
 def SearchByTitle():
     argList = request.args.to_dict(flat=False)
     query_term = argList['query'][0]
-    result = search.searchByTitle(query_term).T
-    jsonResult = result.to_json()
-    return jsonResult
+    result = search.searchByTitle(query_term)
+    if isinstance(result, pd.DataFrame):
+        resultTranpose = result.T
+        jsonResult = resultTranpose.to_json()
+        return jsonResult
+    else:
+        json_object = {'response': '404 not found', 'similar word': result}
+        return json_object
 
 @app.route('/description', methods=['GET'])
 def SearchByDescription():
     argList = request.args.to_dict(flat=False)
     query_term = argList['query'][0]
-    result = search.searchByDescription(query_term).T
-    jsonResult = result.to_json()
-    return jsonResult
+    result = search.searchByDescription(query_term)
+    # check whether if result is a dataframe
+    if isinstance(result, pd.DataFrame):
+        resultTranpose = result.T
+        jsonResult = resultTranpose.to_json()
+        return jsonResult
+    else:
+        json_object = {'response': '404 not found', 'similar word': result}
+        return json_object
 if __name__ == '__main__':
     app.run(debug=True)
