@@ -1,7 +1,7 @@
 import csv
 
 import pandas as pd
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from nltk import PorterStemmer
 from nltk.corpus import stopwords
 from scipy.sparse import hstack
@@ -19,13 +19,20 @@ def SearchByTitle():
     argList = request.args.to_dict(flat=False)
     query_term = argList['query'][0]
     result = search.searchByTitle(query_term)
+    # check whether if result is a dataframe
     if isinstance(result, pd.DataFrame):
         resultTranpose = result.T
         jsonResult = resultTranpose.to_json()
-        return jsonResult
+        response = make_response(jsonResult)
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
     else:
-        json_object = {'response': '404 not found', 'similar word': result}
-        return json_object
+        jsonResult = {'response': '404', 'similar': result}
+        response = make_response(jsonResult)
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
 
 @app.route('/description', methods=['GET'])
 def SearchByDescription():
@@ -36,9 +43,15 @@ def SearchByDescription():
     if isinstance(result, pd.DataFrame):
         resultTranpose = result.T
         jsonResult = resultTranpose.to_json()
-        return jsonResult
+        response = make_response(jsonResult)
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
     else:
-        json_object = {'response': '404 not found', 'similar word': result}
-        return json_object
+        jsonResult = {'response': '404', 'similar': result}
+        response = make_response(jsonResult)
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
 if __name__ == '__main__':
     app.run(debug=True)
