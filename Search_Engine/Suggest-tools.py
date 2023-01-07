@@ -24,15 +24,10 @@ max_id = user_anime_lookup_rating["user_id"].max()
 def generate_new_id(id):
   return id + max_id + 1
 user1000_rating["user_id"] = user1000_rating["user_id"].apply(generate_new_id)
-print(user1000_rating)
 rating = pd.concat([user_anime_lookup_rating, user1000_rating], join="outer", ignore_index=True)
 rating.reset_index(inplace=True)
 rating.drop(columns=["index"], inplace=True)
 # set a new id to 'user1000_rating' dataframe
-print(max_id)
-
-print(user_anime_lookup_rating)
-print(rating.head(20))
 merged_df = anime.merge(rating, left_on='mal_id', right_on='anime_id', how='inner')
 
 #%%
@@ -118,28 +113,23 @@ def make_anime_feature(df):
     df = genre_to_category(df)
     df = demographic_to_category(df)
     df = theme_to_category(df)
-    # print('da anime', df.head(1).to_markdown)
     return df
 def make_user_feature(df):
     # add user feature
     df['rating_count'] = df.groupby('user_id')['anime_id'].transform('count')
     df['rating_mean'] = df.groupby('user_id')['rating_y'].transform('mean')
-    # print('da user', df.head(1).to_markdown)
     return df
 
 def preprocess(merged_df):
     merged_df = make_anime_feature(merged_df)
     merged_df = make_user_feature(merged_df)
-    # print(merged_df.columns)
     return merged_df
 
 merged_df = preprocess(merged_df)
 merged_df = merged_df.drop(['mal_id', 'genres', 'demographics', 'themes'], axis=1)
-# print('afterdrop:', merged_df)
 
 merged_df = merged_df.rename(columns={'anime_id': 'mal_id'})
 merged_df = merged_df.rename(columns={'rating_y': 'rating'})
-# print('merged_df', merged_df)
 fit, blindtest = train_test_split(merged_df, test_size=0.2, random_state=0)
 fit_train, fit_test = train_test_split(fit, test_size=0.3, random_state=0)
 
@@ -154,8 +144,6 @@ target_col = 'rating'
 fit_train = fit_train.sort_values('user_id').reset_index(drop=True)
 fit_test = fit_test.sort_values('user_id').reset_index(drop=True)
 blindtest = blindtest.sort_values('user_id').reset_index(drop=True)
-# print('fit-train:', fit_train)
-# print('fit-test:', fit_test)
 
 # model query data
 fit_train_query = fit_train[user_col].value_counts().sort_index()
@@ -163,7 +151,6 @@ fit_test_query = fit_test[user_col].value_counts().sort_index()
 blindtest_query = blindtest[user_col].value_counts().sort_index()
 
 model = lgb.LGBMRanker(n_estimators=1000, random_state=0)
-# print('target_col:', target_col)
 model.fit(
     fit_train[features],
     fit_train[target_col],
@@ -195,15 +182,17 @@ def predict(user_df, top_k, anime, rating):
     pred_df = pred_df.loc[pred_df[excludes_genres].sum(axis=1)==0]
     pred_df = pred_df.loc[pred_df[excludes_demographics].sum(axis=1) == 0]
     pred_df = pred_df.loc[pred_df[excludes_themes].sum(axis=1) == 0]
+    # drop an anime if that user is already add to favorite
+    ids_to_drop = user_anime_df['mal_id'].tolist()
+    pred_df = pred_df[~pred_df['mal_id'].isin(ids_to_drop)]
+
     for col in user_df.columns:
         if col in features:
-            print('col', user_df[col].values[0])
             pred_df[col] = user_df[col].values[0]
     preds = model.predict(pred_df[features])
     topk_idx = np.argsort(preds)[::-1][:top_k]
 
     recommend_df = pred_df.iloc[topk_idx].reset_index(drop=True)
-
     # check recommend
     print('---------- Recommend ----------')
     for i, row in recommend_df.iterrows():
@@ -221,4 +210,4 @@ if __name__ == '__main__':
     user_df = rating.copy().loc[rating['user_id'] == user_id]
     user_df = user_df.rename(columns={'rating': 'rating_y'})
     user_df = make_user_feature(user_df)
-    predict(user_df, 20, anime, rating)
+    predict(user_df, 40, anime, rating)
