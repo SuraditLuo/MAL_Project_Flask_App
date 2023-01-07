@@ -57,6 +57,7 @@ def make_anime_feature(df):
 def make_user_feature(df):
     # add user feature
     df['rating_count'] = df.groupby('user_id')['anime_id'].transform('count')
+    # print(df)
     df['rating_mean'] = df.groupby('user_id')['rating_y'].transform('mean')
     # print('da user', df.head(1).to_markdown)
     return df
@@ -73,15 +74,11 @@ merged_df = merged_df.drop(['mal_id', 'genres'], axis=1)
 
 merged_df = merged_df.rename(columns={'anime_id': 'mal_id'})
 merged_df = merged_df.rename(columns={'rating_y': 'rating'})
-print('merged_df', merged_df)
+# print('merged_df', merged_df)
 fit, blindtest = train_test_split(merged_df, test_size=0.2, random_state=0)
 fit_train, fit_test = train_test_split(fit, test_size=0.3, random_state=0)
 
-features = ['mal_id', 'title', 'type', 'score', 'scored_by', 'status', 'episodes', 'aired_from', 'aired_to',
-                  'source', 'members', 'favorites', 'duration', 'rating', 'nsfw', 'pending_approval', 'premiered_season',
-                  'premiered_year', 'broadcast_day', 'broadcast_time', 'themes', 'demographics', 'studios',
-                  'producers', 'licensors', 'synopsis', 'background', 'main_picture', 'url', 'trailer_url', 'title_english',
-                  'title_japanese', 'title_synonyms']
+features = ['score', 'scored_by', 'members', 'favorites', 'rating_count', 'rating_mean']
 features += genre_names
 user_col = 'user_id'
 item_col = 'anime_id'
@@ -90,8 +87,8 @@ target_col = 'rating'
 fit_train = fit_train.sort_values('user_id').reset_index(drop=True)
 fit_test = fit_test.sort_values('user_id').reset_index(drop=True)
 blindtest = blindtest.sort_values('user_id').reset_index(drop=True)
-print('fit-train:', fit_train)
-print('fit-test:', fit_test)
+# print('fit-train:', fit_train)
+# print('fit-test:', fit_test)
 
 # model query data
 fit_train_query = fit_train[user_col].value_counts().sort_index()
@@ -127,7 +124,6 @@ plt.show()
 def predict(user_df, top_k, anime, rating):
     user_anime_df = anime.merge(user_df, left_on='mal_id', right_on='anime_id')
     user_anime_df = make_anime_feature(user_anime_df)
-
     excludes_genres = list(np.array(genre_names)[np.nonzero([user_anime_df[genre_names].sum(axis=0) <= 1])[1]])
 
     pred_df = make_anime_feature(anime.copy())
@@ -151,12 +147,14 @@ def predict(user_df, top_k, anime, rating):
     print('---------- Rated ----------')
     user_df = user_df.merge(anime, left_on='anime_id', right_on='mal_id', how='inner')
     for i, row in user_df.sort_values('rating',ascending=False).iterrows():
-        print(f'rating:{row["rating"]}: {row["title_japanese"]}:{row["title_english"]}')
+        print(f'score:{row["score"]}: {row["title_japanese"]}:{row["title_english"]}:{row["main_picture"]}')
 
     return recommend_df
 
 if __name__ == '__main__':
-    user_id = 10
+    user_id = 25
     user_df = rating.copy().loc[rating['user_id'] == user_id]
+    print(user_df)
+    user_df = user_df.rename(columns={'rating': 'rating_y'})
     user_df = make_user_feature(user_df)
     predict(user_df, 10, anime, rating)
