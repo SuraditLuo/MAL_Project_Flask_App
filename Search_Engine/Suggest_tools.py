@@ -6,9 +6,10 @@ import seaborn as sns
 import ranker
 from sklearn.model_selection import train_test_split
 
+
 anime = pd.read_csv('../Resources/Jikan_database.csv')
 user1000_rating = pd.read_csv('../Resources/anime_rating_1000_users.csv')
-user_anime_lookup_rating = pd.read_csv('C:/Users/giale/Downloads/user_favorite.csv')
+user_anime_lookup_rating = pd.DataFrame({'user_id': [0, 0, 0], 'anime_id': [25, 41, 653], 'rating': [8, 7, 10]})
 anime_features = ['mal_id', 'title', 'type', 'score', 'scored_by', 'status', 'episodes', 'aired_from', 'aired_to',
                   'source', 'members', 'favorites', 'duration', 'rating', 'nsfw', 'pending_approval', 'premiered_season',
                   'premiered_year', 'broadcast_day', 'broadcast_time', 'genres', 'themes', 'demographics', 'studios',
@@ -164,14 +165,6 @@ model.fit(
 
 model.predict(blindtest.iloc[:10][features])
 
-# feature importance
-plt.figure(figsize=(10, 7))
-df_plt = pd.DataFrame({'feature_name': features, 'feature_importance': model.feature_importances_})
-df_plt.sort_values('feature_importance', ascending=False, inplace=True)
-sns.barplot(x="feature_importance", y="feature_name", data=df_plt)
-plt.title('feature importance')
-plt.show()
-
 def predict(user_df, top_k, anime, rating):
     user_anime_df = anime.merge(user_df, left_on='mal_id', right_on='anime_id')
     user_anime_df = make_anime_feature(user_anime_df)
@@ -193,13 +186,6 @@ def predict(user_df, top_k, anime, rating):
     topk_idx = np.argsort(preds)[::-1][:top_k]
 
     recommend_df = pred_df.iloc[topk_idx].reset_index(drop=True)
+
     return recommend_df
 
-if __name__ == '__main__':
-    user_id = 0
-    user_df = rating.copy().loc[rating['user_id'] == user_id]
-    user_df = user_df.rename(columns={'rating': 'rating_y'})
-    print(rating.copy())
-    print(user_df)
-    user_df = make_user_feature(user_df)
-    predict(user_df, 40, anime, rating)

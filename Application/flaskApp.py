@@ -1,10 +1,14 @@
+import json
+
 from flask import Flask, request, jsonify, make_response
 from flask import Flask, request
 import pandas as pd
 import Search_Engine.Search_tools as search
 import Search_Engine.Suggest_tools as suggest
+from flask_cors import CORS
 app = Flask(__name__)
-
+CORS(app)
+pd.options.display.max_columns = 100
 @app.route('/title', methods=['GET'])
 def SearchByTitle():
     argList = request.args.to_dict(flat=False)
@@ -49,8 +53,15 @@ def SearchByDescription():
 def Suggestion():
     argList = request.args.to_dict(flat=False)
     query_term = int(argList['query'][0])
+    users_list = argList['list'][0]
+    lookup_user_score_df = pd.DataFrame(eval(users_list))
     anime = suggest.anime
-    rating = suggest.rating
+    suggest.user_anime_lookup_rating = lookup_user_score_df
+    suggest.user1000_rating["user_id"] = suggest.user1000_rating["user_id"].apply(suggest.generate_new_id)
+    rating = pd.concat([suggest.user_anime_lookup_rating, suggest.user1000_rating], join="outer", ignore_index=True)
+    rating.reset_index(inplace=True)
+    rating.drop(columns=["index"], inplace=True)
+    print(rating)
     user_df = rating.copy().loc[rating['user_id'] == query_term]
     user_df = user_df.rename(columns={'rating': 'rating_y'})
     user_df = suggest.make_user_feature(user_df)
