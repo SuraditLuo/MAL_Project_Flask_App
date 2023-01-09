@@ -4,6 +4,9 @@ from rank_bm25 import BM25Okapi
 import numpy as np
 import pandas as pd
 import Search_Engine.AutoChecker as ac
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
 
 # string.punctuation use to remove symbol (e.g. !"#$%&'()*+, -./:;<=>?@[\]^_`{|}~)
 def remove_puncts(input_string, string):
@@ -52,7 +55,9 @@ def searchByDescription(query):
         tokenized_clean_corpus.append(doc)
     bm25 = BM25Okapi(tokenized_clean_corpus)
     # Create txt file
-    # ac.trainDescriptionTextFile(ac.get_text(tokenized_clean_corpus))
+    # remove_dupe_stop_word = ac.get_text(tokenized_clean_corpus)
+    # remove_dupe_stop_word = [word for word in remove_dupe_stop_word if not word in stopwords.words('english')]
+    # ac.trainDescriptionTextFile(ac.get_text(remove_dupe_stop_word))
     relevent_document = 0
     tokenized_query = remove_puncts(query, string).split(" ")
     doc_scores = bm25.get_scores(tokenized_query).tolist()

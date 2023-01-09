@@ -1,11 +1,14 @@
+import string
+
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
 import matplotlib.pyplot as plt
 import seaborn as sns
 import ranker
+from nltk.corpus import stopwords
 from sklearn.model_selection import train_test_split
-
+from Search_Engine.Search_tools import remove_puncts
 
 anime = pd.read_csv('../Resources/Jikan_database.csv')
 user1000_rating = pd.read_csv('../Resources/anime_rating_1000_users.csv')
@@ -52,8 +55,37 @@ theme_names = [
     'Samurai', 'School', 'Showbiz', 'Space', 'Strategy Game', 'Super Power', 'Survival', 'Team Sports',
     'Time Travel', 'Vampire', 'Video Game', 'Visual Arts', 'Workplace'
 ]
+
+description_file = open("../Resources/description.txt")
+textual_synopsis = description_file.read()
+textual_synopsis = textual_synopsis.split()
+# Prevent the feature overlap
+lower_theme_names = list(map(lambda x: x.lower(), theme_names))
+lower_genre_names = list(map(lambda x: x.lower(), genre_names))
+lower_demographic_names = list(map(lambda x: x.lower(), demographic_names))
+textual_synopsis = list(((set(textual_synopsis) - set(lower_theme_names)) - set(lower_genre_names)) - set(lower_demographic_names))
+
+def synopsis_to_category(df):
+    '''Add theme category column
+    '''
+    d = {name :[] for name in textual_synopsis}
+    def f(row):
+        words = row.words.split(',')
+        print(words)
+        for word in textual_synopsis:
+            if word in words[0]:
+                d[word].append(1)
+            else:
+                d[word].append(0)
+    # create genre category dict
+    df.apply(f, axis=1)
+
+    # add genre category
+    genre_df = pd.DataFrame(d, columns=genre_names)
+    df = pd.concat([df, genre_df], axis=1)
+    return df
 def theme_to_category(df):
-    '''Add genre category column
+    '''Add theme category column
     '''
     d = {name :[] for name in theme_names}
     def f(row):
@@ -114,6 +146,7 @@ def make_anime_feature(df):
     df = genre_to_category(df)
     df = demographic_to_category(df)
     df = theme_to_category(df)
+    df = synopsis_to_category(df)
     return df
 def make_user_feature(df):
     # add user feature
@@ -127,7 +160,7 @@ def preprocess(merged_df):
     return merged_df
 
 merged_df = preprocess(merged_df)
-merged_df = merged_df.drop(['mal_id', 'genres', 'demographics', 'themes'], axis=1)
+merged_df = merged_df.drop(['mal_id', 'genres', 'demographics', 'themes', 'synopsis'], axis=1)
 
 merged_df = merged_df.rename(columns={'anime_id': 'mal_id'})
 merged_df = merged_df.rename(columns={'rating_y': 'rating'})
@@ -138,6 +171,7 @@ features = ['score', 'scored_by', 'members', 'favorites', 'rating_count', 'ratin
 features += genre_names
 features += demographic_names
 features += theme_names
+# features += textual_synopsis
 user_col = 'user_id'
 item_col = 'anime_id'
 target_col = 'rating'
@@ -171,10 +205,12 @@ def predict(user_df, top_k, anime, rating):
     excludes_genres = list(np.array(genre_names)[np.nonzero([user_anime_df[genre_names].sum(axis=0) <= 1])[1]])
     excludes_demographics = list(np.array(demographic_names)[np.nonzero([user_anime_df[demographic_names].sum(axis=0) <= 1])[1]])
     excludes_themes = list(np.array(theme_names)[np.nonzero([user_anime_df[theme_names].sum(axis=0) <= 1])[1]])
+    excludes_synopsis = list(np.array(textual_synopsis)[np.nonzero([user_anime_df[textual_synopsis].sum(axis=0) <= 1])[1]])
     pred_df = make_anime_feature(anime.copy())
     pred_df = pred_df.loc[pred_df[excludes_genres].sum(axis=1)==0]
     pred_df = pred_df.loc[pred_df[excludes_demographics].sum(axis=1) == 0]
     pred_df = pred_df.loc[pred_df[excludes_themes].sum(axis=1) == 0]
+    pred_df = pred_df.loc[pred_df[excludes_synopsis].sum(axis=1) == 0]
     # drop an anime if that user is already add to favorite
     ids_to_drop = user_anime_df['mal_id'].tolist()
     pred_df = pred_df[~pred_df['mal_id'].isin(ids_to_drop)]
