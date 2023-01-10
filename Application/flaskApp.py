@@ -8,7 +8,6 @@ import Search_Engine.Suggest_tools as suggest
 from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
-pd.options.display.max_columns = 100
 @app.route('/title', methods=['GET'])
 def SearchByTitle():
     argList = request.args.to_dict(flat=False)

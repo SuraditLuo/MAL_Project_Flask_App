@@ -9,6 +9,7 @@ import ranker
 from nltk.corpus import stopwords
 from sklearn.model_selection import train_test_split
 from Search_Engine.Search_tools import remove_puncts
+pd.options.display.max_columns = 100
 
 anime = pd.read_csv('../Resources/Jikan_database.csv')
 user1000_rating = pd.read_csv('../Resources/anime_rating_1000_users.csv')
@@ -18,24 +19,6 @@ anime_features = ['mal_id', 'title', 'type', 'score', 'scored_by', 'status', 'ep
                   'premiered_year', 'broadcast_day', 'broadcast_time', 'genres', 'themes', 'demographics', 'studios',
                   'producers', 'licensors', 'synopsis', 'background', 'main_picture', 'url', 'trailer_url', 'title_english',
                   'title_japanese', 'title_synonyms']
-anime = anime[anime_features]
-#%%
-# merge 2 dataframes
-user_anime_lookup_rating = user_anime_lookup_rating.rename(columns={'mal_id': 'anime_id'})
-user_anime_lookup_rating = user_anime_lookup_rating.rename(columns={'score': 'rating'})
-user_anime_lookup_rating = user_anime_lookup_rating.rename(columns={'id': 'user_id'})
-max_id = user_anime_lookup_rating["user_id"].max()
-def generate_new_id(id):
-  return id + max_id + 1
-user1000_rating["user_id"] = user1000_rating["user_id"].apply(generate_new_id)
-rating = pd.concat([user_anime_lookup_rating, user1000_rating], join="outer", ignore_index=True)
-rating.reset_index(inplace=True)
-rating.drop(columns=["index"], inplace=True)
-# set a new id to 'user1000_rating' dataframe
-merged_df = anime.merge(rating, left_on='mal_id', right_on='anime_id', how='inner')
-
-#%%
-
 genre_names = [
     'Action', 'Adventure', 'Avant Garde', 'Award Wining', 'Boys Love', 'Comedy', 'Drama',
     'Fantasy', 'Girls Love', 'Gourmet', 'Horror', 'Mystery', 'Romance',
@@ -55,47 +38,74 @@ theme_names = [
     'Samurai', 'School', 'Showbiz', 'Space', 'Strategy Game', 'Super Power', 'Survival', 'Team Sports',
     'Time Travel', 'Vampire', 'Video Game', 'Visual Arts', 'Workplace'
 ]
-
+lower_case_theme_names = list(map(lambda x: x.lower(), theme_names))
+lower_case_genre_names = list(map(lambda x: x.lower(), genre_names))
+lower_case_demographic_names = list(map(lambda x: x.lower(), demographic_names))
+def synopsisToList(df):
+     corpus = df['synopsis'].to_numpy().tolist()
+     cleaned_corpus = []
+     for doc in corpus:
+         cleaned_doc = remove_puncts(doc, string)
+         cleaned_doc = cleaned_doc.split()
+         # cleaned_doc = [word for word in cleaned_doc if not word in stopwords.words('english')]
+         cleaned_doc = list(((set(cleaned_doc) - set(lower_case_theme_names)) - set(lower_case_genre_names)) - set(lower_case_demographic_names))
+         cleaned_corpus.append(cleaned_doc)
+     df.drop('synopsis', axis = 1, inplace = True)
+     df['synopsis'] = cleaned_corpus
+     return df
+anime = synopsisToList(anime)
+anime = anime[anime_features]
+#%%
+# merge 2 dataframes
+max_id = user_anime_lookup_rating["user_id"].max()
+def generate_new_id(id):
+  return id + max_id + 1
+user1000_rating["user_id"] = user1000_rating["user_id"].apply(generate_new_id)
+rating = pd.concat([user_anime_lookup_rating, user1000_rating], join="outer", ignore_index=True)
+rating.reset_index(inplace=True)
+rating.drop(columns=["index"], inplace=True)
+# set a new id to 'user1000_rating' dataframe
+merged_df = anime.merge(rating, left_on='mal_id', right_on='anime_id', how='inner')
+print(merged_df)
 description_file = open("../Resources/description.txt")
 textual_synopsis = description_file.read()
 textual_synopsis = textual_synopsis.split()
 # Prevent the feature overlap
-lower_theme_names = list(map(lambda x: x.lower(), theme_names))
-lower_genre_names = list(map(lambda x: x.lower(), genre_names))
-lower_demographic_names = list(map(lambda x: x.lower(), demographic_names))
-textual_synopsis = list(((set(textual_synopsis) - set(lower_theme_names)) - set(lower_genre_names)) - set(lower_demographic_names))
-
+textual_synopsis = list(((set(textual_synopsis) - set(lower_case_theme_names)) - set(lower_case_genre_names)) - set(lower_case_demographic_names))
 def synopsis_to_category(df):
-    '''Add theme category column
+    '''Add synopsis category column
     '''
     d = {name :[] for name in textual_synopsis}
     def f(row):
-        words = row.words.split(',')
-        print(words)
-        for word in textual_synopsis:
-            if word in words[0]:
-                d[word].append(1)
+        synopses = str(row.synopsis).split(',')
+        print(synopses)
+        for synopsis in textual_synopsis:
+            if synopsis in synopses[0]:
+                d[synopsis].append(1)
             else:
-                d[word].append(0)
-    # create genre category dict
+                d[synopsis].append(0)
+    # create synopsis category dict
     df.apply(f, axis=1)
 
     # add genre category
-    genre_df = pd.DataFrame(d, columns=genre_names)
-    df = pd.concat([df, genre_df], axis=1)
+    synopsis_df = pd.DataFrame(d, columns=textual_synopsis)
+    df = pd.concat([df, synopsis_df], axis=1)
+    print(df)
     return df
 def theme_to_category(df):
     '''Add theme category column
     '''
     d = {name :[] for name in theme_names}
+    # print(d)
     def f(row):
         themes = row.themes.split(',')
+        print(themes)
         for theme in theme_names:
             if theme in themes[0]:
                 d[theme].append(1)
             else:
                 d[theme].append(0)
-    # create genre category dict
+    # create theme category dict
     df.apply(f, axis=1)
 
     # add genre category
@@ -171,7 +181,7 @@ features = ['score', 'scored_by', 'members', 'favorites', 'rating_count', 'ratin
 features += genre_names
 features += demographic_names
 features += theme_names
-# features += textual_synopsis
+features += textual_synopsis
 user_col = 'user_id'
 item_col = 'anime_id'
 target_col = 'rating'
