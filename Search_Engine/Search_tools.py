@@ -24,6 +24,7 @@ def searchByTitle(query):
     for doc in cleaned_corpus:
         doc = doc.split()
         tokenized_clean_corpus.append(doc)
+    # print(tokenized_clean_corpus)
     bm25 = BM25Okapi(tokenized_clean_corpus)
     # Create txt file
     # ac.trainTitleTextFile(ac.get_text(tokenized_clean_corpus))

@@ -64,6 +64,7 @@ def Suggestion():
     user_df = rating.copy().loc[rating['user_id'] == query_term]
     user_df = user_df.rename(columns={'rating': 'rating_y'})
     user_df = suggest.make_user_feature(user_df)
+    # print(user_df)
     recommend_df = suggest.predict(user_df, 40, anime, rating)
     resultTranpose = recommend_df[['mal_id', 'title', 'main_picture']].T
     jsonResult = resultTranpose.to_json()

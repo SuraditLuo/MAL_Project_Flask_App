@@ -1,5 +1,7 @@
+import csv
 import string
 
+import nltk
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
@@ -9,16 +11,52 @@ import ranker
 from nltk.corpus import stopwords
 from sklearn.model_selection import train_test_split
 from Search_Engine.Search_tools import remove_puncts
-pd.options.display.max_columns = 100
+from rank_bm25 import BM25Okapi
 
-anime = pd.read_csv('../Resources/Jikan_database.csv')
+# remove prefix suffix (not cover all suffix)
+def removeSuffix(list):
+    newList = []
+    for word in list:
+        if word.endswith('fullness'):
+            word = word[:-len('fullness')]
+        if word.endswith('lessness'):
+            word = word[:-len('lessness')]
+        if word.endswith('less'):
+            word = word[:-len('less')]
+        if word.endswith('ness'):
+            word = word[:-len('less')]
+        if word.endswith('ly'):
+            word = word[:-len('ly')]
+        if word.endswith('tic'):
+            word = word[:-len('tic')]
+        if word.endswith('ing'):
+            word = word[:-len('ing')]
+        newList.append(word)
+        print(newList)
+    return newList
+pd.options.display.max_columns = 100
+anime = pd.read_csv('../Resources/Jikan_database_with_keyword.csv', encoding = "ISO-8859-1")
+
+title = anime['synopsis']
+corpus = title.to_numpy().tolist()
+cleaned_corpus = []
+for doc in corpus:
+    cleaned_doc = remove_puncts(doc, string)
+    cleaned_corpus.append(cleaned_doc)
+tokenized_clean_corpus = []
+for doc in cleaned_corpus:
+    doc = doc.split()
+    cleaned_doc = removeSuffix(cleaned_doc)
+    tokenized_clean_corpus.append(doc)
+bm25 = BM25Okapi(tokenized_clean_corpus)
+# print('bm25', bm25.get_scores('military').tolist())
 user1000_rating = pd.read_csv('../Resources/anime_rating_1000_users.csv')
 user_anime_lookup_rating = pd.DataFrame({'user_id': [0, 0, 0], 'anime_id': [25, 41, 653], 'rating': [8, 7, 10]})
 anime_features = ['mal_id', 'title', 'type', 'score', 'scored_by', 'status', 'episodes', 'aired_from', 'aired_to',
                   'source', 'members', 'favorites', 'duration', 'rating', 'nsfw', 'pending_approval', 'premiered_season',
                   'premiered_year', 'broadcast_day', 'broadcast_time', 'genres', 'themes', 'demographics', 'studios',
                   'producers', 'licensors', 'synopsis', 'background', 'main_picture', 'url', 'trailer_url', 'title_english',
-                  'title_japanese', 'title_synonyms']
+                  'title_japanese', 'title_synonyms', 'synopsis_keyword']
 genre_names = [
     'Action', 'Adventure', 'Avant Garde', 'Award Wining', 'Boys Love', 'Comedy', 'Drama',
     'Fantasy', 'Girls Love', 'Gourmet', 'Horror', 'Mystery', 'Romance',
@@ -41,20 +79,27 @@ theme_names = [
 lower_case_theme_names = list(map(lambda x: x.lower(), theme_names))
 lower_case_genre_names = list(map(lambda x: x.lower(), genre_names))
 lower_case_demographic_names = list(map(lambda x: x.lower(), demographic_names))
-def synopsisToList(df):
-     corpus = df['synopsis'].to_numpy().tolist()
-     cleaned_corpus = []
-     for doc in corpus:
-         cleaned_doc = remove_puncts(doc, string)
-         cleaned_doc = cleaned_doc.split()
-         # cleaned_doc = [word for word in cleaned_doc if not word in stopwords.words('english')]
-         cleaned_doc = list(((set(cleaned_doc) - set(lower_case_theme_names)) - set(lower_case_genre_names)) - set(lower_case_demographic_names))
-         cleaned_corpus.append(cleaned_doc)
-     df.drop('synopsis', axis = 1, inplace = True)
-     df['synopsis'] = cleaned_corpus
-     return df
-anime = synopsisToList(anime)
+words = set(nltk.corpus.words.words())
+keywordScore = pd.read_csv('../Resources/top55_BM25score.csv')
+# print(list(keywordScore['word']))
 anime = anime[anime_features]
+def average(lst):
+    return sum(lst) / len(lst)
+
+# Create a csv that replicated to jikan database, but adding keyword column
+# def synopsisToList(df):
+#      corpus = df['synopsis'].to_numpy().tolist()
+#      cleaned_corpus = []
+#      for doc in corpus:
+#          cleaned_doc = remove_puncts(doc, string)
+#          cleaned_doc = cleaned_doc.split()
+#          cleaned_doc = removeSuffix(cleaned_doc)
+#          cleaned_doc = list(set(cleaned_doc).intersection(set(list(keywordScore['word']))))
+#          cleaned_corpus.append(cleaned_doc)
+#      df['synopsis_keyword'] = cleaned_corpus
+#      df.to_csv('../Resources/Jikan_database_with_keyword.csv', index=False)
+#      return df
+# anime = synopsisToList(anime)
 #%%
 # merge 2 dataframes
 max_id = user_anime_lookup_rating["user_id"].max()
@@ -66,31 +111,55 @@ rating.reset_index(inplace=True)
 rating.drop(columns=["index"], inplace=True)
 # set a new id to 'user1000_rating' dataframe
 merged_df = anime.merge(rating, left_on='mal_id', right_on='anime_id', how='inner')
-print(merged_df)
-description_file = open("../Resources/description.txt")
-textual_synopsis = description_file.read()
-textual_synopsis = textual_synopsis.split()
-# Prevent the feature overlap
-textual_synopsis = list(((set(textual_synopsis) - set(lower_case_theme_names)) - set(lower_case_genre_names)) - set(lower_case_demographic_names))
-def synopsis_to_category(df):
-    '''Add synopsis category column
+# print(merged_df)
+
+## Create a csv that store all word with avg bm25 score attach to it.
+# remove suffix and word that have length less than 4
+# description_file = open("../Resources/description.txt")
+# textual_synopsis = description_file.read()
+# textual_synopsis = textual_synopsis.split()
+# # Prevent the feature overlap
+# # Remove prefix suffix
+# textual_synopsis = removeSuffix(textual_synopsis)
+# textual_synopsis = list(((set(textual_synopsis) - set(lower_case_theme_names)) - set(lower_case_genre_names)) - set(lower_case_demographic_names))
+#
+# textual_synopsis = [i for i in textual_synopsis if i in words]
+# textual_synopsis = [i for i in textual_synopsis if len(i) > 3]
+# print(textual_synopsis)
+# scoreList = []
+#
+# # find average bm25 score
+# for word in textual_synopsis:
+#     scores = bm25.get_scores(word).tolist()
+#     if scores != []:
+#         scoresMean = round(average(scores), 6)
+#         scoreList.append(scoresMean)
+#         print(scoresMean)
+
+
+keywordWithScore = pd.read_csv('../Resources/top55_BM25score.csv')
+keywordList = keywordWithScore[['word', 'round_score']].values.tolist()
+keyword_word_list = list(keywordWithScore['word'])
+def keyword_to_category(df):
+    '''Add keyword category column
     '''
-    d = {name :[] for name in textual_synopsis}
+    d = {name :[] for name in keyword_word_list}
+    # print(type(keywordList))
     def f(row):
-        synopses = str(row.synopsis).split(',')
-        print(synopses)
-        for synopsis in textual_synopsis:
-            if synopsis in synopses[0]:
-                d[synopsis].append(1)
+        keywords = row.synopsis_keyword.split(',')
+        for i, keyword in enumerate(keyword_word_list):
+            if keyword in keywords[0]:
+                d[keyword].append(keywordList[i][1])
             else:
-                d[synopsis].append(0)
+                d[keyword].append(0)
+
     # create synopsis category dict
     df.apply(f, axis=1)
 
     # add genre category
-    synopsis_df = pd.DataFrame(d, columns=textual_synopsis)
-    df = pd.concat([df, synopsis_df], axis=1)
-    print(df)
+    keyword_df = pd.DataFrame(d, columns=keyword_word_list)
+    df = pd.concat([df, keyword_df], axis=1)
+    # print(df)
     return df
 def theme_to_category(df):
     '''Add theme category column
@@ -99,7 +168,6 @@ def theme_to_category(df):
     # print(d)
     def f(row):
         themes = row.themes.split(',')
-        print(themes)
         for theme in theme_names:
             if theme in themes[0]:
                 d[theme].append(1)
@@ -156,7 +224,7 @@ def make_anime_feature(df):
     df = genre_to_category(df)
     df = demographic_to_category(df)
     df = theme_to_category(df)
-    df = synopsis_to_category(df)
+    df = keyword_to_category(df)
     return df
 def make_user_feature(df):
     # add user feature
@@ -170,7 +238,8 @@ def preprocess(merged_df):
     return merged_df
 
 merged_df = preprocess(merged_df)
-merged_df = merged_df.drop(['mal_id', 'genres', 'demographics', 'themes', 'synopsis'], axis=1)
+# print('merged_df', merged_df)
+merged_df = merged_df.drop(['mal_id', 'genres', 'demographics', 'themes', 'synopsis', 'synopsis_keyword'], axis=1)
 
 merged_df = merged_df.rename(columns={'anime_id': 'mal_id'})
 merged_df = merged_df.rename(columns={'rating_y': 'rating'})
@@ -181,7 +250,7 @@ features = ['score', 'scored_by', 'members', 'favorites', 'rating_count', 'ratin
 features += genre_names
 features += demographic_names
 features += theme_names
-features += textual_synopsis
+features += keyword_word_list
 user_col = 'user_id'
 item_col = 'anime_id'
 target_col = 'rating'
@@ -208,14 +277,21 @@ model.fit(
 )
 
 model.predict(blindtest.iloc[:10][features])
-
+# display SciView
+plt.figure(figsize=(10, 7))
+df_plt = pd.DataFrame({'feature_name': features, 'feature_importance': model.feature_importances_})
+df_plt.sort_values('feature_importance', ascending=False, inplace=True)
+sns.barplot(x="feature_importance", y="feature_name", data=df_plt)
+plt.title('feature importance')
+plt.show()
 def predict(user_df, top_k, anime, rating):
     user_anime_df = anime.merge(user_df, left_on='mal_id', right_on='anime_id')
     user_anime_df = make_anime_feature(user_anime_df)
+    # print(user_anime_df)
     excludes_genres = list(np.array(genre_names)[np.nonzero([user_anime_df[genre_names].sum(axis=0) <= 1])[1]])
     excludes_demographics = list(np.array(demographic_names)[np.nonzero([user_anime_df[demographic_names].sum(axis=0) <= 1])[1]])
     excludes_themes = list(np.array(theme_names)[np.nonzero([user_anime_df[theme_names].sum(axis=0) <= 1])[1]])
-    excludes_synopsis = list(np.array(textual_synopsis)[np.nonzero([user_anime_df[textual_synopsis].sum(axis=0) <= 1])[1]])
+    excludes_synopsis = list(np.array(keyword_word_list)[np.nonzero([user_anime_df[keyword_word_list].sum(axis=0) <= 1])[1]])
     pred_df = make_anime_feature(anime.copy())
     pred_df = pred_df.loc[pred_df[excludes_genres].sum(axis=1)==0]
     pred_df = pred_df.loc[pred_df[excludes_demographics].sum(axis=1) == 0]
